@@ -7,22 +7,17 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
     private SharedPreferences sp;
     private TextView status;
-    private Button permButton;
-    private Switch toggle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,28 +39,28 @@ public class MainActivity extends Activity {
         status.setPadding(0, dp(12), 0, dp(12));
         root.addView(status);
 
-        permButton = new Button(this);
-        permButton.setText("1. Allow \"Display over other apps\"");
-        permButton.setOnClickListener(v -> startActivity(new Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + getPackageName()))));
-        root.addView(permButton);
+        Button access = new Button(this);
+        access.setText("1. Open Accessibility settings");
+        access.setAllCaps(false);
+        access.setOnClickListener(v ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        root.addView(access);
 
-        toggle = new Switch(this);
+        Button restricted = new Button(this);
+        restricted.setText("If the switch is greyed out: open App info");
+        restricted.setAllCaps(false);
+        restricted.setOnClickListener(v -> startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName()))));
+        root.addView(restricted);
+
+        Switch toggle = new Switch(this);
         toggle.setText("2. Show pill");
         toggle.setTextSize(18);
         toggle.setPadding(0, dp(16), 0, dp(16));
-        toggle.setChecked(sp.getBoolean("enabled", false));
-        toggle.setOnCheckedChangeListener((CompoundButton b, boolean on) -> {
-            if (on && !Settings.canDrawOverlays(this)) {
-                b.setChecked(false);
-                Toast.makeText(this, "Allow the permission first", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            sp.edit().putBoolean("enabled", on).apply();
-            Intent i = new Intent(this, OverlayService.class);
-            if (on) startForegroundService(i); else stopService(i);
-        });
+        toggle.setChecked(sp.getBoolean("enabled", true));
+        toggle.setOnCheckedChangeListener((b, on) ->
+                sp.edit().putBoolean("enabled", on).apply());
         root.addView(toggle);
 
         TextView hint = new TextView(this);
@@ -73,14 +68,32 @@ public class MainActivity extends Activity {
         hint.setPadding(0, 0, 0, dp(8));
         root.addView(hint);
 
-        addSlider(root, "Width", "w", 30, 260, 96);
-        addSlider(root, "Height", "h", 14, 70, 30);
-        addSlider(root, "Distance from top", "y", 0, 80, 8);
+        addSlider(root, "Width", "w", 30, 260, 96, " dp");
+        addSlider(root, "Height", "h", 14, 70, 30, " dp");
+        addSlider(root, "Distance from top", "y", 0, 80, 8, " dp");
+
+        TextView colTitle = new TextView(this);
+        colTitle.setText("\nColour");
+        colTitle.setTextSize(18);
+        root.addView(colTitle);
+
+        LinearLayout swatches = new LinearLayout(this);
+        swatches.setOrientation(LinearLayout.HORIZONTAL);
+        addSwatch(swatches, "Black", 0, 0, 0);
+        addSwatch(swatches, "Dark", 25, 25, 25);
+        addSwatch(swatches, "Grey", 70, 70, 70);
+        addSwatch(swatches, "White", 255, 255, 255);
+        root.addView(swatches);
+
+        addSlider(root, "Red", "r", 0, 255, 0, "");
+        addSlider(root, "Green", "g", 0, 255, 0, "");
+        addSlider(root, "Blue", "b", 0, 255, 0, "");
+        addSlider(root, "Opacity", "a", 10, 100, 100, " %");
 
         TextView note = new TextView(this);
-        note.setText("\nTip for POCO / HyperOS: Settings > Apps > Island Pill > Autostart ON, "
-                + "Battery saver > No restrictions, and lock the app in Recents. "
-                + "The pill hides in landscape.");
+        note.setText("\nHyperOS tips: Autostart ON for this app, Battery saver > No restrictions, "
+                + "lock the app in Recents. The pill hides in landscape. "
+                + "This app reads nothing from your screen.");
         note.setTextSize(13);
         root.addView(note);
 
@@ -92,23 +105,25 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        boolean ok = Settings.canDrawOverlays(this);
-        status.setText(ok ? "Permission: granted" : "Permission: not granted yet");
-        permButton.setVisibility(ok ? View.GONE : View.VISIBLE);
-        if (!ok && toggle.isChecked()) toggle.setChecked(false);
+        String enabled = Settings.Secure.getString(
+                getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        boolean on = enabled != null && enabled.contains(getPackageName());
+        status.setText(on ? "Accessibility: ON - pill is active"
+                : "Accessibility: OFF - turn on Island Pill under Installed apps");
     }
 
-    private void addSlider(LinearLayout root, String label, String key, int min, int max, int def) {
+    private void addSlider(LinearLayout root, String label, String key, int min, int max,
+                           int def, String unit) {
         TextView t = new TextView(this);
         SeekBar s = new SeekBar(this);
         int v = sp.getInt(key, def);
-        t.setText(label + ": " + v + " dp");
+        t.setText(label + ": " + v + unit);
         s.setMax(max - min);
         s.setProgress(v - min);
         s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 int val = progress + min;
-                t.setText(label + ": " + val + " dp");
+                t.setText(label + ": " + val + unit);
                 sp.edit().putInt(key, val).apply();
             }
             @Override public void onStartTrackingTouch(SeekBar sb) { }
@@ -116,6 +131,18 @@ public class MainActivity extends Activity {
         });
         root.addView(t);
         root.addView(s);
+    }
+
+    private void addSwatch(LinearLayout row, String name, int r, int g, int b) {
+        Button btn = new Button(this);
+        btn.setText(name);
+        btn.setAllCaps(false);
+        btn.setOnClickListener(v -> {
+            sp.edit().putInt("r", r).putInt("g", g).putInt("b", b).putInt("a", 100).apply();
+            recreate();
+        });
+        row.addView(btn, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
     }
 
     private int dp(int v) {
