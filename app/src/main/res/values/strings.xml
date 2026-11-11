@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="service_desc">Draws a static black pill over the camera hole. It does not read or collect anything from your screen.</string>
-</resources>
